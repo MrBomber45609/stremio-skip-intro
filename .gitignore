@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+proyecto-stremio-web/stremio-web/build/
+
+# Environment and secrets
+.env
+*.key
+!*.key.example
+
+# API database (local)
+stremio-skip-intro-api/database.db
+*.db
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Android build (optional: remove if you want to commit android/)
+# proyecto-stremio-web/stremio-web/android/app/build/
+# proyecto-stremio-web/stremio-web/android/build/

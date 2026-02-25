@@ -1,0 +1,12 @@
+tu-dominio.com {
+    root * /var/www/stremio-skip-intro/build
+    file_server
+    try_files {path} /index.html
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3710
+    }
+    handle /health {
+        reverse_proxy 127.0.0.1:3710
+    }
+}
