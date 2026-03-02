@@ -9,11 +9,9 @@ let stremioServer;
 let localServer;
 
 const STREMIO_PORT = 11470;
-const LOCAL_UI_PORT = 8081;
+const LOCAL_UI_PORT = 8089; // Puerto único para evitar conflictos con webpack (8081)
 
-// --- Servidor HTTP local para servir el build en producción ---
-// Necesario porque el core WASM y Web Workers no funcionan con file://
-
+// --- MIME types ---
 const MIME_TYPES = {
     '.html': 'text/html',
     '.js': 'application/javascript',
@@ -28,58 +26,62 @@ const MIME_TYPES = {
     '.woff': 'font/woff',
     '.woff2': 'font/woff2',
     '.ttf': 'font/ttf',
-    '.map': 'application/json'
+    '.map': 'application/json',
+    '.txt': 'text/plain'
 };
 
+// --- Servidor HTTP local para servir el build en producción ---
 function startLocalServer(buildPath) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         localServer = http.createServer((req, res) => {
-            let urlPath = req.url.split('?')[0];
+            let urlPath = decodeURIComponent(req.url.split('?')[0]);
             if (urlPath === '/') urlPath = '/index.html';
 
+            // Resolver ruta real del archivo (fuera del asar si es necesario)
             const filePath = path.join(buildPath, urlPath);
-            const ext = path.extname(filePath);
+            const ext = path.extname(filePath).toLowerCase();
             const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
             fs.readFile(filePath, (err, data) => {
-                if (err) {
-                    // SPA fallback: si no encuentra el archivo, sirve index.html
-                    fs.readFile(path.join(buildPath, 'index.html'), (err2, fallback) => {
-                        if (err2) {
-                            res.writeHead(404);
-                            res.end('Not found');
-                        } else {
-                            res.writeHead(200, { 'Content-Type': 'text/html' });
-                            res.end(fallback);
-                        }
+                if (!err) {
+                    res.writeHead(200, {
+                        'Content-Type': contentType,
+                        'Access-Control-Allow-Origin': '*'
                     });
-                } else {
-                    res.writeHead(200, { 'Content-Type': contentType });
                     res.end(data);
+                    return;
                 }
+
+                // SPA fallback
+                fs.readFile(path.join(buildPath, 'index.html'), (err2, fallback) => {
+                    if (err2) {
+                        res.writeHead(404);
+                        res.end('Not found: ' + urlPath);
+                    } else {
+                        res.writeHead(200, {
+                            'Content-Type': 'text/html',
+                            'Access-Control-Allow-Origin': '*'
+                        });
+                        res.end(fallback);
+                    }
+                });
             });
         });
 
         localServer.listen(LOCAL_UI_PORT, '127.0.0.1', () => {
-            console.log(`Servidor UI local en http://127.0.0.1:${LOCAL_UI_PORT}`);
-            resolve();
+            console.log(`[UI Server] Servidor local en http://127.0.0.1:${LOCAL_UI_PORT}`);
+            console.log(`[UI Server] Sirviendo archivos desde: ${buildPath}`);
+            resolve(true);
         });
 
         localServer.on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                // Puerto ya en uso (webpack dev server corriendo), no pasa nada
-                console.log(`Puerto ${LOCAL_UI_PORT} ya en uso (probablemente webpack dev server)`);
-                resolve();
-            } else {
-                console.error('Error al iniciar servidor UI local:', err);
-                resolve();
-            }
+            console.error('[UI Server] Error:', err.message);
+            resolve(false);
         });
     });
 }
 
 // --- Ventana principal ---
-
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -94,12 +96,21 @@ function createWindow() {
         }
     });
 
-    // Siempre cargamos desde http:// para que el WASM y Workers funcionen
-    mainWindow.loadURL(`http://127.0.0.1:${LOCAL_UI_PORT}`);
+    const isDev = !app.isPackaged;
+    const loadUrl = isDev
+        ? 'http://localhost:8081'
+        : `http://127.0.0.1:${LOCAL_UI_PORT}`;
+
+    console.log(`[Window] Cargando: ${loadUrl} (isDev: ${isDev})`);
+    mainWindow.loadURL(loadUrl);
+
+    // Abrir DevTools en desarrollo para depuración
+    if (isDev) {
+        mainWindow.webContents.openDevTools();
+    }
 }
 
 // --- CORS bypass ---
-
 function setupCORSBypass() {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
         const responseHeaders = Object.assign({}, details.responseHeaders);
@@ -115,7 +126,6 @@ function setupCORSBypass() {
 }
 
 // --- Servidor de streaming Stremio ---
-
 function checkServerRunning() {
     return new Promise((resolve) => {
         const req = http.get(`http://127.0.0.1:${STREMIO_PORT}/settings`, (res) => {
@@ -129,28 +139,51 @@ function checkServerRunning() {
     });
 }
 
+function findStremioServer() {
+    const localAppData = process.env.LOCALAPPDATA;
+    // Buscar server.js en las ubicaciones conocidas de Stremio
+    const candidates = [
+        path.join(localAppData, 'Programs', 'LNV', 'Stremio-4', 'server.js'),
+        path.join(localAppData, 'Programs', 'LNV', 'Stremio', 'server', 'server.js'),
+        path.join(localAppData, 'Programs', 'Stremio', 'server.js'),
+        path.join('C:', 'Program Files', 'Stremio', 'server.js'),
+        path.join('C:', 'Program Files (x86)', 'Stremio', 'server.js'),
+    ];
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            console.log('[Stremio] server.js encontrado en:', candidate);
+            return candidate;
+        }
+    }
+
+    console.error('[Stremio] No se encontró server.js en ninguna ubicación conocida:');
+    candidates.forEach(c => console.error('  -', c));
+    return null;
+}
+
 async function startStremioServer() {
     const alreadyRunning = await checkServerRunning();
     if (alreadyRunning) {
-        console.log('Stremio server ya está corriendo en el puerto', STREMIO_PORT);
+        console.log('[Stremio] Server ya corriendo en puerto', STREMIO_PORT);
         return;
     }
 
-    const serverPath = path.join(
-        process.env.LOCALAPPDATA,
-        'Programs',
-        'Stremio',
-        'server.js'
-    );
-
-    console.log('Encendiendo motor de Stremio en:', serverPath);
+    const serverPath = findStremioServer();
+    if (!serverPath) return;
 
     const stremioDir = path.dirname(serverPath);
+
+    // Buscar runtime: stremio-runtime.exe (Node empaquetado) o node del sistema
+    const runtimePath = path.join(stremioDir, 'stremio-runtime.exe');
+    const runtime = fs.existsSync(runtimePath) ? runtimePath : 'node';
+
+    console.log('[Stremio] Encendiendo motor en:', serverPath);
+    console.log('[Stremio] Runtime:', runtime);
+
     const env = Object.assign({}, process.env, {
         PATH: stremioDir + path.delimiter + process.env.PATH
     });
-
-    const runtime = path.join(stremioDir, 'stremio-runtime.exe');
 
     stremioServer = spawn(runtime, [serverPath], {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -168,27 +201,28 @@ async function startStremioServer() {
     });
 
     stremioServer.on('error', (err) => {
-        console.error('Error al iniciar el motor:', err);
+        console.error('[Stremio] Error al iniciar:', err);
     });
 
     stremioServer.on('exit', (code) => {
-        console.log('Stremio server exited with code:', code);
+        console.log('[Stremio] Server exited with code:', code);
     });
 }
 
-function waitForServer(maxRetries = 10) {
+function waitForServer(maxRetries = 15) {
     return new Promise((resolve) => {
         let retries = 0;
         const check = () => {
             checkServerRunning().then((running) => {
                 if (running) {
-                    console.log('Stremio server listo en puerto', STREMIO_PORT);
+                    console.log('[Stremio] Server listo en puerto', STREMIO_PORT);
                     resolve(true);
                 } else if (retries < maxRetries) {
                     retries++;
+                    console.log(`[Stremio] Esperando servidor... intento ${retries}/${maxRetries}`);
                     setTimeout(check, 1000);
                 } else {
-                    console.error('Stremio server no respondió después de', maxRetries, 'intentos');
+                    console.error('[Stremio] Server no respondió después de', maxRetries, 'intentos');
                     resolve(false);
                 }
             });
@@ -198,15 +232,23 @@ function waitForServer(maxRetries = 10) {
 }
 
 // --- Inicio de la app ---
-
 app.whenReady().then(async () => {
+    console.log('[App] isPackaged:', app.isPackaged);
+    console.log('[App] __dirname:', __dirname);
+    console.log('[App] LOCALAPPDATA:', process.env.LOCALAPPDATA);
+
     setupCORSBypass();
 
     // En producción servimos el build desde un HTTP server local
-    // En desarrollo, webpack dev server ya está corriendo en el mismo puerto
     if (app.isPackaged) {
         const buildPath = path.join(__dirname, 'build');
-        await startLocalServer(buildPath);
+        console.log('[App] Build path:', buildPath);
+        console.log('[App] Build exists:', fs.existsSync(buildPath));
+
+        const serverStarted = await startLocalServer(buildPath);
+        if (!serverStarted) {
+            console.error('[App] Falló el servidor UI local, intentando en puerto alternativo...');
+        }
     }
 
     await startStremioServer();
@@ -221,7 +263,7 @@ app.on('window-all-closed', () => {
 app.on('quit', () => {
     if (stremioServer) {
         stremioServer.kill();
-        console.log('Motor de Stremio apagado.');
+        console.log('[App] Motor de Stremio apagado.');
     }
     if (localServer) {
         localServer.close();
