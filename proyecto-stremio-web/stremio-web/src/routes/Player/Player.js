@@ -1206,12 +1206,18 @@ const Player = ({ urlParams, queryParams }) => {
             ) : null}
 
             {/* --- BOTONES MARCAR INTRO / CRÉDITOS (cuando no hay datos y controles visibles) --- */}
-            {!markingMode && !showVerification && !overlayHidden && !showSkipButton ? (
+            {!markingMode && !showVerification && !overlayHidden && !showSkipButton && video.state.time !== null && video.state.duration > 0 ? (
                 <div className={styles['skip-intro-marking-toolbar']}>
                     {!introData ? (
                         <button
                             className={classnames(styles['skip-intro-btn-toolbar'], styles['intro'])}
-                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMarkingType('intro'); setMarkingMode('start'); }}
+                            onClick={(e) => {
+                                e.stopPropagation(); e.preventDefault();
+                                const currentSec = Math.floor(video.state.time / 1000);
+                                setMarkingType('intro');
+                                setIntroStart(currentSec);
+                                setMarkingMode('end');
+                            }}
                             onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                             onDoubleClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -1243,16 +1249,14 @@ const Player = ({ urlParams, queryParams }) => {
                     onDoubleClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
                 >
                     <span className={styles['skip-intro-marking-text']}>
-                        {markingMode === 'start' && markingType === 'credits' && 'Reproduce hasta el INICIO de los créditos (donde debe salir el popup del siguiente capítulo)'}
-                        {markingMode === 'start' && markingType === 'intro' && 'Reproduce hasta el INICIO de la intro'}
-                        {markingMode === 'end' && markingType === 'intro' && `Inicio: ${Math.floor(introStart / 60)}:${String(introStart % 60).padStart(2, '0')} — Marca el FIN`}
+                        {markingMode === 'start' && markingType === 'credits' && 'Reproduce hasta el INICIO de los créditos'}
+                        {markingMode === 'end' && markingType === 'intro' && `Inicio: ${Math.floor(introStart / 60)}:${String(introStart % 60).padStart(2, '0')} — Reproduce hasta el FIN de la intro`}
                         {markingMode === 'saving' && 'Guardando...'}
                     </span>
                     {markingMode !== 'saving' ? (
                         <button
                             className={classnames(
                                 markingMode === 'end' ? styles['skip-intro-btn-mark-end'] : styles['skip-intro-btn-mark-start'],
-                                markingMode === 'start' && markingType === 'intro' && styles['intro'],
                                 markingMode === 'start' && markingType === 'credits' && styles['credits']
                             )}
                             onClick={(e) => {
@@ -1261,13 +1265,9 @@ const Player = ({ urlParams, queryParams }) => {
                                 const currentSec = Math.floor(video.state.time / 1000);
                                 skipIntroLog('Boton click - mode:', markingMode, 'type:', markingType, 'currentSec:', currentSec);
                                 if (markingType === 'credits' && markingMode === 'start') {
-                                    // Créditos: solo marcamos el inicio; el popup de siguiente capítulo se abrirá al llegar aquí
                                     submitMarker(currentSec, currentSec + 5, 'credits');
                                     setMarkingMode(false);
                                     setIntroStart(null);
-                                } else if (markingMode === 'start') {
-                                    setIntroStart(currentSec);
-                                    setMarkingMode('end');
                                 } else {
                                     submitMarker(introStart, currentSec, markingType);
                                 }
@@ -1275,7 +1275,7 @@ const Player = ({ urlParams, queryParams }) => {
                             onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
                         >
-                            {markingType === 'credits' && markingMode === 'start' ? 'Marcar inicio de créditos' : markingMode === 'start' ? 'Marcar Inicio' : 'Marcar Fin'}
+                            {markingType === 'credits' && markingMode === 'start' ? 'Marcar inicio de créditos' : 'Marcar Final'}
                         </button>
                     ) : null}
                     <button

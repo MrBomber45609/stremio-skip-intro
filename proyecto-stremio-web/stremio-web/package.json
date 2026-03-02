@@ -3,8 +3,10 @@
     "displayName": "Stremio",
     "version": "5.0.0-beta.30",
     "author": "Smart Code OOD",
+    "description": "Stremio with Skip Intro and Skip Credits community markers",
     "private": true,
     "license": "gpl-2.0",
+    "main": "main.js",
     "scripts": {
         "start": "webpack serve --mode development",
         "start-prod": "webpack serve --mode production",
@@ -14,10 +16,15 @@
         "scan-translations": "pnpx jest ./tests/i18nScan.test.js",
         "build:android": "webpack --mode production && npx cap sync android",
         "cap:sync": "npx cap sync",
-        "android": "npx cap open android"
+        "android": "npx cap open android",
+        "electron": "electron .",
+        "electron:dev": "concurrently \"webpack serve --mode development\" \"wait-on http://localhost:8081 && electron .\"",
+        "electron:build": "webpack --mode production && electron-builder --win",
+        "electron:build:portable": "webpack --mode production && electron-builder --win portable"
     },
     "dependencies": {
         "@babel/runtime": "7.26.0",
+        "@capacitor/core": "^6.0.0",
         "@sentry/browser": "8.42.0",
         "@stremio/stremio-colors": "5.2.0",
         "@stremio/stremio-core-web": "0.52.0",
@@ -46,13 +53,14 @@
         "spatial-navigation-polyfill": "github:Stremio/spatial-navigation#64871b1422466f5f45d24ebc8bbd315b2ebab6a6",
         "stremio-translations": "github:Stremio/stremio-translations#1bfcb6d2a4f37bb647959ba0bbbd1ade1415c2fe",
         "url": "0.11.4",
-        "use-long-press": "^3.2.0",
-        "@capacitor/core": "^6.0.0"
+        "use-long-press": "^3.2.0"
     },
     "devDependencies": {
         "@babel/core": "7.26.0",
         "@babel/preset-env": "7.26.0",
         "@babel/preset-react": "7.26.3",
+        "@capacitor/android": "^6.0.0",
+        "@capacitor/cli": "^6.0.0",
         "@eslint/js": "^9.16.0",
         "@stylistic/eslint-plugin": "^5.4.0",
         "@stylistic/eslint-plugin-jsx": "^4.4.1",
@@ -65,6 +73,8 @@
         "css-loader": "6.11.0",
         "cssnano": "7.0.6",
         "cssnano-preset-advanced": "7.0.6",
+        "electron": "^40.6.1",
+        "electron-builder": "^25.1.8",
         "eslint": "^9.16.0",
         "eslint-plugin-react": "^7.37.2",
         "globals": "^15.13.0",
@@ -84,8 +94,35 @@
         "webpack": "5.97.0",
         "webpack-cli": "5.1.4",
         "webpack-dev-server": "^5.1.0",
-        "workbox-webpack-plugin": "^7.3.0",
-        "@capacitor/cli": "^6.0.0",
-        "@capacitor/android": "^6.0.0"
+        "workbox-webpack-plugin": "^7.3.0"
+    },
+    "build": {
+        "appId": "com.stremio.skipintro",
+        "productName": "Stremio Skip Intro",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "main.js",
+            "build/**/*",
+            "assets/favicons/**/*",
+            "assets/images/icon*.png"
+        ],
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "icon": "assets/favicons/favicon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "installerIcon": "assets/favicons/favicon.ico",
+            "uninstallerIcon": "assets/favicons/favicon.ico"
+        },
+        "portable": {
+            "artifactName": "${productName}-${version}-portable.exe"
+        }
     }
 }

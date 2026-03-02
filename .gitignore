@@ -4,6 +4,9 @@ node_modules/
 # Build output
 build/
 proyecto-stremio-web/stremio-web/build/
+proyecto-stremio-web/stremio-web/dist-electron/
+proyecto-stremio-web/stremio-web/release/
+proyecto-stremio-web/stremio-web/release2/
 
 # Environment and secrets
 .env
