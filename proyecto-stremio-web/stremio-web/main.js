@@ -181,9 +181,17 @@ async function startStremioServer() {
     console.log('[Stremio] Encendiendo motor en:', serverPath);
     console.log('[Stremio] Runtime:', runtime);
 
+    const ffmpegPath = path.join(stremioDir, 'ffmpeg.exe');
+    const ffprobePath = path.join(stremioDir, 'ffprobe.exe');
+
     const env = Object.assign({}, process.env, {
-        PATH: stremioDir + path.delimiter + process.env.PATH
+        PATH: stremioDir + path.delimiter + process.env.PATH,
+        FFMPEG_BIN: fs.existsSync(ffmpegPath) ? ffmpegPath : undefined,
+        FFPROBE_BIN: fs.existsSync(ffprobePath) ? ffprobePath : undefined
     });
+
+    console.log('[Stremio] FFMPEG_BIN:', env.FFMPEG_BIN || '(not set, relying on PATH)');
+    console.log('[Stremio] FFPROBE_BIN:', env.FFPROBE_BIN || '(not set, relying on PATH)');
 
     stremioServer = spawn(runtime, [serverPath], {
         stdio: ['ignore', 'pipe', 'pipe'],
