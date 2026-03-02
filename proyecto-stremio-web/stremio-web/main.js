@@ -228,19 +228,33 @@ async function startStremioServer() {
     const stremioDir = path.dirname(serverPath);
 
     // Buscar runtime: stremio-runtime.exe (Node empaquetado) o node del sistema
-    const runtimePath = path.join(stremioDir, 'stremio-runtime.exe');
-    const runtime = fs.existsSync(runtimePath) ? runtimePath : 'node';
+    // stremio-runtime puede estar en un directorio diferente al server.js
+    const runtimeCandidates = [
+        path.join(stremioDir, 'stremio-runtime.exe'),
+        path.join(process.env.LOCALAPPDATA, 'Programs', 'Stremio', 'stremio-runtime.exe'),
+        path.join(process.env.LOCALAPPDATA, 'Programs', 'LNV', 'Stremio-4', 'stremio-runtime.exe'),
+    ];
+    const runtimePath = runtimeCandidates.find(r => fs.existsSync(r));
+    const runtime = runtimePath || 'node';
 
     console.log('[Stremio] Encendiendo motor en:', serverPath);
     console.log('[Stremio] Runtime:', runtime);
 
-    const ffmpegPath = path.join(stremioDir, 'ffmpeg.exe');
-    const ffprobePath = path.join(stremioDir, 'ffprobe.exe');
+    // Buscar ffmpeg/ffprobe en el directorio del server y en el del runtime
+    const searchDirs = [stremioDir];
+    if (runtimePath) searchDirs.push(path.dirname(runtimePath));
+
+    let ffmpegBin = null;
+    let ffprobeBin = null;
+    for (const dir of searchDirs) {
+        if (!ffmpegBin && fs.existsSync(path.join(dir, 'ffmpeg.exe'))) ffmpegBin = path.join(dir, 'ffmpeg.exe');
+        if (!ffprobeBin && fs.existsSync(path.join(dir, 'ffprobe.exe'))) ffprobeBin = path.join(dir, 'ffprobe.exe');
+    }
 
     const env = Object.assign({}, process.env, {
-        PATH: stremioDir + path.delimiter + process.env.PATH,
-        FFMPEG_BIN: fs.existsSync(ffmpegPath) ? ffmpegPath : undefined,
-        FFPROBE_BIN: fs.existsSync(ffprobePath) ? ffprobePath : undefined
+        PATH: stremioDir + path.delimiter + (runtimePath ? path.dirname(runtimePath) + path.delimiter : '') + process.env.PATH,
+        FFMPEG_BIN: ffmpegBin || undefined,
+        FFPROBE_BIN: ffprobeBin || undefined
     });
 
     console.log('[Stremio] FFMPEG_BIN:', env.FFMPEG_BIN || '(not set, relying on PATH)');
@@ -292,6 +306,29 @@ function waitForServer(maxRetries = 15) {
     });
 }
 
+// Activar NVENC (GPU) para transcodificación más rápida
+function enableNVENC() {
+    const postData = JSON.stringify({ transcodeProfile: 'nvenc-win', transcodeHardwareAccel: true });
+    const req = http.request({
+        hostname: '127.0.0.1',
+        port: STREMIO_PORT,
+        path: '/settings',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
+    }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+            console.log('[Stremio] NVENC activado:', data);
+        });
+    });
+    req.on('error', (err) => {
+        console.log('[Stremio] No se pudo activar NVENC:', err.message);
+    });
+    req.write(postData);
+    req.end();
+}
+
 // --- Inicio de la app ---
 app.whenReady().then(async () => {
     console.log('[App] isPackaged:', app.isPackaged);
@@ -313,7 +350,10 @@ app.whenReady().then(async () => {
     }
 
     await startStremioServer();
-    await waitForServer();
+    const serverReady = await waitForServer();
+    if (serverReady) {
+        enableNVENC(); // Activar transcodificación por GPU (RTX)
+    }
     createWindow();
 });
 
