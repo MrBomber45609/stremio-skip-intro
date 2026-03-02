@@ -139,6 +139,52 @@ function checkServerRunning() {
     });
 }
 
+// Verifica si el servidor corriendo tiene ffmpeg funcional
+function checkServerHasFFmpeg() {
+    return new Promise((resolve) => {
+        const testUrl = `http://127.0.0.1:${STREMIO_PORT}/hlsv2/probe?m=http://test.local/test.mkv`;
+        const req = http.get(testUrl, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    // Si el error menciona "no ffmpeg" o "locateExecutables", no tiene ffmpeg
+                    const errMsg = json.error && json.error.message || '';
+                    if (errMsg.includes('no ffmpeg') || errMsg.includes('locateExecutables')) {
+                        console.log('[Stremio] Server corriendo SIN ffmpeg:', errMsg);
+                        resolve(false);
+                    } else {
+                        // Cualquier otro error (como "Probe process exited") significa que ffmpeg SÍ está
+                        console.log('[Stremio] Server corriendo CON ffmpeg OK');
+                        resolve(true);
+                    }
+                } catch (e) {
+                    resolve(true); // Si no podemos parsear, asumimos que está bien
+                }
+            });
+        });
+        req.on('error', () => resolve(true));
+        req.setTimeout(3000, () => {
+            req.destroy();
+            resolve(true);
+        });
+    });
+}
+
+// Mata el proceso del servidor en el puerto de Stremio
+function killExistingServer() {
+    return new Promise((resolve) => {
+        const { exec } = require('child_process');
+        exec(`for /f "tokens=5" %a in ('netstat -aon ^| findstr :${STREMIO_PORT} ^| findstr LISTENING') do taskkill /PID %a /F`, { shell: 'cmd.exe' }, (err) => {
+            if (err) console.log('[Stremio] No se pudo matar servidor existente (puede que ya murió)');
+            else console.log('[Stremio] Servidor existente terminado para reiniciar con ffmpeg');
+            // Esperar un momento para que el puerto se libere
+            setTimeout(() => resolve(), 1500);
+        });
+    });
+}
+
 function findStremioServer() {
     const localAppData = process.env.LOCALAPPDATA;
     // Buscar server.js en las ubicaciones conocidas de Stremio
@@ -166,7 +212,14 @@ async function startStremioServer() {
     const alreadyRunning = await checkServerRunning();
     if (alreadyRunning) {
         console.log('[Stremio] Server ya corriendo en puerto', STREMIO_PORT);
-        return;
+        // Verificar si tiene ffmpeg, si no, matar y reiniciar
+        const hasFFmpeg = await checkServerHasFFmpeg();
+        if (hasFFmpeg) {
+            console.log('[Stremio] Server existente tiene ffmpeg, usándolo tal cual');
+            return;
+        }
+        console.log('[Stremio] Server existente NO tiene ffmpeg, reiniciando...');
+        await killExistingServer();
     }
 
     const serverPath = findStremioServer();
