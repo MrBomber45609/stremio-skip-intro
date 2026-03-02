@@ -1,23 +1,23 @@
 # Stremio Skip Intro
 
-Fork de Stremio que añade **Skip Intro**: saltar intros y créditos en series/películas usando marcadores compartidos por la comunidad.
+A Stremio fork that adds a **Skip Intro** feature: skip intros and credits in TV shows/movies using community-shared markers.
 
-Este repositorio contiene:
+This repository contains:
 
-| Carpeta | Descripción |
+| Folder | Description |
 |--------|-------------|
-| **proyecto-stremio-web/stremio-web/** | Frontend web (Stremio Web + botón Skip Intro, marcar inicio/fin intro). Ver [README del frontend](proyecto-stremio-web/stremio-web/README.md). |
-| **stremio-skip-intro-api/** | API REST (Node.js + Express + SQLite) para guardar y consultar marcadores de intros/créditos. |
+| **proyecto-stremio-web/stremio-web/** | Web frontend (Stremio Web + Skip Intro button, mark intro start/end). See the [frontend README](proyecto-stremio-web/stremio-web/README.md). |
+| **stremio-skip-intro-api/** | REST API (Node.js + Express + SQLite) to save and query intro/credits markers. |
 
-## Uso rápido
+## Quick Start
 
-- **Solo usar**: la API está desplegada en **https://apistremio-skip-intro.org**. Abre el frontend (web o APK) y ya usará esa API.
-- **Desarrollar frontend**: `cd proyecto-stremio-web/stremio-web && npm install && npm start`
+- **Just use it**: the API is deployed at **https://apistremio-skip-intro.org**. Open the frontend (web or APK) and it will automatically use this API.
+- **Develop frontend**: `cd proyecto-stremio-web/stremio-web && npm install && npm start`
 - **Build frontend**: `cd proyecto-stremio-web/stremio-web && npm run build`
-- **APK Android**: ver [BUILD-APK.md](proyecto-stremio-web/stremio-web/BUILD-APK.md) en el frontend.
-- **API local**: `cd stremio-skip-intro-api && npm install && cp .env.example .env && npm start` (puerto 3710).
+- **Android APK**: see [BUILD-APK.md](proyecto-stremio-web/stremio-web/BUILD-APK.md) in the frontend folder.
+- **Local API**: `cd stremio-skip-intro-api && npm install && cp .env.example .env && npm start` (port 3710).
 
-## Licencia
+## License
 
 - Frontend: GPLv2 (Stremio – Smart Code OOD).
 - API: ISC.
